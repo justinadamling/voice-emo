@@ -1,16 +1,16 @@
 # Environment and credentials
 .env
-config/hume_gs.json
-*.pem
-*.key
+.env.*
+!.env.example
+**/config/hume_gs.json
+**/.env.local
+**/.env.development
+**/.env.production
+**/config/*.json
 
-# Data files
-data/
-*.wav
-predictions.json
-
-# Python
-__pycache__/
+# Dependencies
+**/node_modules/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -32,13 +32,16 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-
-# IDE specific files
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.DS_Store 
+.DS_Store
+
+# Data and temp files
+data/
+*.wav
+predictions.json
+tmp/
+temp/ 

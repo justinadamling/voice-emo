@@ -1,109 +1,114 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import {
-  Box,
-  Button,
-  VStack,
-  Text,
-  useToast,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-} from '@chakra-ui/react';
+import { useState, useEffect, useRef } from 'react';
+import { useToast } from '@chakra-ui/react';
+import { Badge } from '@/subframe/components/Badge';
 
-export const RecordingSection = () => {
+interface RecordingSectionProps {
+  onEmotionsUpdate?: (emotions: Array<{ name: string; score: number }>) => void;
+}
+
+export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [emotions, setEmotions] = useState<Array<{ name: string; score: number }>>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const toast = useToast();
 
-  // Debug logs
-  useEffect(() => {
-    console.log('Component mounted');
-  }, []);
+  // Process buffered chunks
+  const processBufferedChunks = async (chunks: Blob[]) => {
+    if (chunks.length === 0) return;
+    
+    try {
+      // Simply combine the chunks, preserving the original WebM structure
+      const combinedBlob = new Blob(chunks, { type: 'audio/webm' });
+      console.log(`Processing ${chunks.length} chunks, total size: ${combinedBlob.size} bytes`);
+      
+      const formData = new FormData();
+      formData.append('file', combinedBlob, 'audio.webm');
 
-  useEffect(() => {
-    console.log('Audio URL changed:', audioUrl);
-  }, [audioUrl]);
+      const response = await fetch('http://localhost:8000/analyze', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(errorData.detail || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (onEmotionsUpdate && data.emotions) {
+        onEmotionsUpdate(data.emotions);
+      }
+    } catch (error) {
+      console.error('Error processing chunks:', error);
+      toast({
+        title: 'Error processing audio',
+        description: error instanceof Error ? error.message : 'Failed to process audio',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+    }
+  };
 
   const startRecording = async () => {
     try {
       console.log('Requesting media permissions...');
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 44100
-          }
-        });
-        console.log('Media permission granted');
-      } catch (err) {
-        console.error('Media permission error:', err);
-        toast({
-          title: 'Microphone access denied',
-          description: 'Please allow microphone access to record audio',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-        return;
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+          channelCount: 1
+        }
+      });
 
-      console.log('Creating recorder...');
-      let mimeType = 'audio/webm';
+      const mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
-        console.log('WebM not supported, trying alternative format');
-        mimeType = 'audio/mp4';
+        throw new Error('WebM with Opus codec is not supported in this browser');
       }
 
       const recorder = new MediaRecorder(stream, {
-        mimeType: mimeType
+        mimeType: mimeType,
+        audioBitsPerSecond: 128000
       });
-      
-      const chunks: BlobPart[] = [];
 
-      recorder.ondataavailable = (e) => {
-        console.log('Data available:', e.data.size);
+      chunksRef.current = [];
+      let isFirstChunk = true;
+      
+      recorder.ondataavailable = async (e) => {
         if (e.data.size > 0) {
-          chunks.push(e.data);
+          console.log(`Received chunk of size: ${e.data.size} bytes${isFirstChunk ? ' (contains headers)' : ''}`);
+          
+          if (isFirstChunk) {
+            // Store the first chunk separately as it contains the WebM headers
+            chunksRef.current = [e.data];
+            isFirstChunk = false;
+          } else {
+            chunksRef.current.push(e.data);
+            
+            // Process when we have enough data (first chunk + 1 more chunk)
+            if (chunksRef.current.length >= 2) {
+              const chunksToProcess = chunksRef.current.slice();
+              // Keep the first chunk (with headers) and last chunk
+              chunksRef.current = [chunksRef.current[0], chunksRef.current[chunksRef.current.length - 1]];
+              await processBufferedChunks(chunksToProcess);
+            }
+          }
         }
       };
 
-      recorder.onstop = () => {
-        console.log('Recording stopped, creating blob...');
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        console.log('Created URL:', url);
-        setAudioUrl(url);
-      };
-
-      recorder.onerror = (e) => {
-        console.error('Recorder error:', e);
-        toast({
-          title: 'Recording error',
-          description: 'An error occurred while recording',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      };
-
-      console.log('Starting recorder...');
-      recorder.start(100);
-      setMediaRecorder(recorder);
+      // Start recording in 3-second chunks
+      recorder.start(3000);
+      mediaRecorderRef.current = recorder;
       setIsRecording(true);
-      setEmotions([]);
       
       toast({
         title: 'Recording started',
+        description: 'Processing audio in chunks...',
         status: 'info',
         duration: 2000,
         isClosable: true,
@@ -121,131 +126,52 @@ export const RecordingSection = () => {
   };
 
   const stopRecording = () => {
-    console.log('Stopping recording...');
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      try {
-        mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach(track => track.stop());
-        setIsRecording(false);
-        
-        toast({
-          title: 'Recording complete',
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-        });
-      } catch (error) {
-        console.error('Error stopping recording:', error);
-        toast({
-          title: 'Error stopping recording',
-          description: error instanceof Error ? error.message : 'Unknown error',
-          status: 'error',
-          duration: 4000,
-          isClosable: true,
-        });
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+      
+      // Process any remaining audio
+      if (chunksRef.current.length > 0) {
+        processBufferedChunks(chunksRef.current);
+        chunksRef.current = [];
       }
-    }
-  };
-
-  const analyzeRecording = async () => {
-    if (!audioUrl) return;
-
-    try {
-      setIsAnalyzing(true);
+      
       toast({
-        title: 'Analyzing recording...',
-        status: 'info',
-        duration: 2000,
-      });
-
-      const response = await fetch(audioUrl);
-      const audioBlob = await response.blob();
-
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-
-      const result = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!result.ok) {
-        const error = await result.json();
-        console.error('Error from backend:', error);
-        throw new Error(error.detail || 'Failed to analyze recording');
-      }
-
-      const data = await result.json();
-      setEmotions(data.emotions);
-      toast({
-        title: 'Analysis complete',
+        title: 'Recording complete',
         status: 'success',
         duration: 2000,
+        isClosable: true,
       });
-    } catch (error) {
-      console.error('Error analyzing recording:', error);
-      toast({
-        title: error instanceof Error ? error.message : 'Error analyzing recording',
-        status: 'error',
-        duration: 4000,
-      });
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
   return (
-    <VStack spacing={4} align="center" w="100%" maxW="500px" p={4}>
-      <Button
-        colorScheme={isRecording ? 'red' : 'blue'}
+    <div className="flex flex-col items-center gap-4 w-full">
+      <button
         onClick={isRecording ? stopRecording : startRecording}
-        size="lg"
-        w="full"
-        isDisabled={isAnalyzing}
+        className={`w-full px-6 py-3 text-white font-medium rounded-lg transition-colors ${
+          isRecording 
+            ? 'bg-error-600 hover:bg-error-700' 
+            : 'bg-brand-600 hover:bg-brand-700'
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
+        disabled={isAnalyzing}
       >
-        {isRecording ? 'Stop Recording' : 'Speak'}
-      </Button>
-
-      {audioUrl && (
-        <Box w="100%">
-          <audio src={audioUrl} controls style={{ width: '100%' }} />
-          <Button
-            mt={4}
-            colorScheme="green"
-            onClick={analyzeRecording}
-            isLoading={isAnalyzing}
-            loadingText="Analyzing..."
-            w="full"
-          >
-            Check Emotions
-          </Button>
-        </Box>
-      )}
-
-      {emotions.length > 0 && (
-        <Box w="100%" mt={4}>
-          <Text mb={2} fontWeight="bold">Detected Emotions:</Text>
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th>Emotion</Th>
-                <Th isNumeric>Probability</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {emotions
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 10)
-                .map((emotion) => (
-                  <Tr key={emotion.name}>
-                    <Td>{emotion.name}</Td>
-                    <Td isNumeric>{(emotion.score * 100).toFixed(1)}%</Td>
-                  </Tr>
-                ))}
-            </Tbody>
-          </Table>
-        </Box>
-      )}
-    </VStack>
+        <div className="flex items-center justify-center gap-2">
+          {isRecording && <Badge variant="error">Recording & Processing</Badge>}
+          <span className="text-body font-body">
+            {isRecording ? 'Stop Recording' : 'Start Recording'}
+          </span>
+        </div>
+      </button>
+    </div>
   );
 }; 

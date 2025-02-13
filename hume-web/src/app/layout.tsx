@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Voice Analysis Tool",
-  description: "Record and analyze voice prosody",
+  title: "Voice Emotion Analysis",
+  description: "Analyze emotions in your voice using Hume AI",
 };
 
 interface RootLayoutProps {
@@ -21,6 +21,11 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" className={inter.variable}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com"/>
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

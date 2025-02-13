@@ -1,0 +1,5 @@
+{
+  "directory": "./hume-web/src/subframe",
+  "importAlias": "@/subframe/*",
+  "projectId": "c961a860fa00"
+}

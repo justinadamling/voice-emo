@@ -1,13 +1,73 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  presets: [require("./src/subframe/tailwind.config.js")],
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/subframe/**/*.{js,ts,jsx,tsx}'
   ],
   theme: {
-    extend: {},
+    extend: {
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+      },
+      backgroundColor: {
+        'emotion-sadness': '#1B2A35',
+        'emotion-horror': '#2D004D',
+        'emotion-fear': '#4A003F',
+        'emotion-anxiety': '#5A3D72',
+        'emotion-distress': '#9D89A3',
+        'emotion-anger': '#D42A1C',
+        'emotion-empathic-pain': '#E0744A',
+        'emotion-sympathy': '#FEC468',
+        'emotion-shame': '#5B1A5D',
+        'emotion-guilt': '#A28A33',
+        'emotion-doubt': '#8B93C0',
+        'emotion-embarrassment': '#FFA2AF',
+        'emotion-pain': '#7D2121',
+        'emotion-awkwardness': '#943356',
+        'emotion-disappointment': '#54717C',
+        'emotion-envy': '#A8C94E',
+        'emotion-disgust': '#527244',
+        'emotion-contempt': '#AA735A',
+        'emotion-confusion': '#E8C1D0',
+        'emotion-interest': '#FFD247',
+        'emotion-contemplation': '#CBD452',
+        'emotion-realization': '#FFF199',
+        'emotion-nostalgia': '#A7D2A5',
+        'emotion-awe': '#65FF71',
+        'emotion-entrancement': '#4EB8A2',
+        'emotion-satisfaction': '#4DB8B5',
+        'emotion-contentment': '#4F837A',
+        'emotion-craving': '#6F7B45',
+        'emotion-relief': '#78D6D2',
+        'emotion-calmness': '#B6D8EE',
+        'emotion-boredom': '#8A8A8A',
+        'emotion-tiredness': '#CBCACA',
+        'emotion-concentration': '#E7661F',
+        'emotion-admiration': '#FF72B8',
+        'emotion-pride': '#FFD146',
+        'emotion-joy': '#80E261',
+        'emotion-amusement': '#C5D644',
+        'emotion-excitement': '#B8FF29',
+        'emotion-triumph': '#D9E659',
+        'emotion-ecstasy': '#3EFF2E',
+        'emotion-aesthetic-appreciation': '#723DA3',
+        'emotion-adoration': '#F9B9CF',
+        'emotion-love': '#F44B8E',
+        'emotion-romance': '#C11A4D',
+        'emotion-desire': '#EB6539',
+        'emotion-annoyance': '#E69F3C',
+        'emotion-disapproval': '#5D6E54',
+        'emotion-sarcasm': '#A6C747',
+        'emotion-enthusiasm': '#FF7F27',
+        'emotion-gratitude': '#D9A24E',
+        'emotion-surprise-positive': '#82CFFD',
+        'emotion-surprise-negative': '#4C3583'
+      }
+    },
   },
-  plugins: [],
-}
-
+  plugins: []
+}; 
