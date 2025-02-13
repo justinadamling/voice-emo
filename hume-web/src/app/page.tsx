@@ -9,14 +9,26 @@ import { RecordingSection } from '../components/RecordingSection';
 export default function Home() {
   const [primaryEmotion, setPrimaryEmotion] = useState({ name: '-', score: 0 });
   const [emotions, setEmotions] = useState<Array<{ name: string; score: number }>>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [isLiveAnalysis, setIsLiveAnalysis] = useState(false);
 
-  const handleEmotionsUpdate = (newEmotions: Array<{ name: string; score: number }>) => {
+  const handleEmotionsUpdate = (newEmotions: Array<{ name: string; score: number }>, isFinal: boolean) => {
     // Sort emotions by score in descending order
     const sortedEmotions = [...newEmotions].sort((a, b) => b.score - a.score);
     setEmotions(sortedEmotions);
     if (sortedEmotions.length > 0) {
       setPrimaryEmotion(sortedEmotions[0]);
     }
+    setShowResults(true);
+    setIsLiveAnalysis(!isFinal);
+  };
+
+  // Clear results when recording starts
+  const handleRecordingStart = () => {
+    setShowResults(false);
+    setEmotions([]);
+    setPrimaryEmotion({ name: '-', score: 0 });
+    setIsLiveAnalysis(false);
   };
 
   const getEmotionStyle = (emotionName: string) => {
@@ -100,24 +112,32 @@ export default function Home() {
           <div className="flex w-full max-w-[576px] flex-col items-center justify-center gap-6 px-6 py-6">
             <div className="flex w-full flex-col items-center justify-center gap-2">
               <span className="w-full text-heading-1 font-heading-1 text-default-font text-center">
-                What am I feeling?
+                Fast Prosody
               </span>
               <span className="text-body font-body text-subtext-color text-center">
-                Understand your emotional state through advanced voice analysis
+                3s chunks + weighted averaging + WebM header caching + selective chunk processing
               </span>
             </div>
             <div className="flex flex-col items-center gap-4">
-              <RecordingSection onEmotionsUpdate={handleEmotionsUpdate} />
+              <RecordingSection 
+                onEmotionsUpdate={handleEmotionsUpdate}
+                onRecordingStart={handleRecordingStart}
+              />
             </div>
           </div>
 
-          {emotions.length > 0 && (
+          {showResults && emotions.length > 0 && (
             <div className="flex w-full flex-col items-start gap-12">
               <div className="flex w-full flex-col items-start gap-4">
                 <div className="flex w-full flex-col items-start gap-1">
-                  <span className="w-full text-heading-2 font-heading-2 text-default-font">
-                    Highest Emotion
-                  </span>
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-heading-2 font-heading-2 text-default-font">
+                      Analysis Results
+                    </span>
+                    {isLiveAnalysis && (
+                      <Badge variant="warning">Live Analysis</Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="flex w-full items-start gap-4">
                   <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-default-background px-4 py-4 shadow-sm">
