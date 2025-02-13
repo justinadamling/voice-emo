@@ -13,17 +13,17 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const chunkCountRef = useRef<number>(0);
   const toast = useToast();
 
-  // Process buffered chunks
-  const processBufferedChunks = async (chunks: Blob[]) => {
-    if (chunks.length === 0) return;
-    
+  // Process chunks when we have enough for a valid WebM file
+  const processChunks = async () => {
+    if (chunksRef.current.length === 0) return;
+
     try {
-      // Simply combine the chunks, preserving the original WebM structure
-      const combinedBlob = new Blob(chunks, { type: 'audio/webm' });
-      console.log(`Processing ${chunks.length} chunks, total size: ${combinedBlob.size} bytes`);
+      // Combine a few chunks to make a valid WebM file
+      const combinedBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      console.log(`Processing chunks, total size: ${combinedBlob.size} bytes`);
       
       const formData = new FormData();
       formData.append('file', combinedBlob, 'audio.webm');
@@ -34,23 +34,18 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `Server error: ${response.status}`);
+        throw new Error(`Server error: ${response.status}`);
       }
 
       const data = await response.json();
       if (onEmotionsUpdate && data.emotions) {
         onEmotionsUpdate(data.emotions);
       }
+
+      // Clear processed chunks
+      chunksRef.current = [];
     } catch (error) {
       console.error('Error processing chunks:', error);
-      toast({
-        title: 'Error processing audio',
-        description: error instanceof Error ? error.message : 'Failed to process audio',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
     }
   };
 
@@ -77,38 +72,29 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
       });
 
       chunksRef.current = [];
-      let isFirstChunk = true;
+      chunkCountRef.current = 0;
       
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0) {
-          console.log(`Received chunk of size: ${e.data.size} bytes${isFirstChunk ? ' (contains headers)' : ''}`);
-          
-          if (isFirstChunk) {
-            // Store the first chunk separately as it contains the WebM headers
-            chunksRef.current = [e.data];
-            isFirstChunk = false;
-          } else {
-            chunksRef.current.push(e.data);
-            
-            // Process when we have enough data (first chunk + 1 more chunk)
-            if (chunksRef.current.length >= 2) {
-              const chunksToProcess = chunksRef.current.slice();
-              // Keep the first chunk (with headers) and last chunk
-              chunksRef.current = [chunksRef.current[0], chunksRef.current[chunksRef.current.length - 1]];
-              await processBufferedChunks(chunksToProcess);
-            }
+          console.log(`Received chunk of size: ${e.data.size} bytes`);
+          chunksRef.current.push(e.data);
+          chunkCountRef.current += 1;
+
+          // Process after collecting 2 chunks (6 seconds of audio)
+          if (chunkCountRef.current >= 2) {
+            await processChunks();
+            chunkCountRef.current = 0;
           }
         }
       };
 
-      // Start recording in 3-second chunks
-      recorder.start(3000);
+      recorder.start(3000); // Collect 3-second chunks
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
       
       toast({
         title: 'Recording started',
-        description: 'Processing audio in chunks...',
+        description: 'Recording audio...',
         status: 'info',
         duration: 2000,
         isClosable: true,
@@ -131,15 +117,15 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
       
-      // Process any remaining audio
+      // Process any remaining chunks
       if (chunksRef.current.length > 0) {
-        processBufferedChunks(chunksRef.current);
-        chunksRef.current = [];
+        processChunks();
       }
       
       toast({
         title: 'Recording complete',
-        status: 'success',
+        description: 'Recording stopped',
+        status: 'info',
         duration: 2000,
         isClosable: true,
       });
