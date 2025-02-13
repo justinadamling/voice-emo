@@ -11,9 +11,11 @@ export default function Home() {
   const [emotions, setEmotions] = useState<Array<{ name: string; score: number }>>([]);
 
   const handleEmotionsUpdate = (newEmotions: Array<{ name: string; score: number }>) => {
-    setEmotions(newEmotions);
-    if (newEmotions.length > 0) {
-      setPrimaryEmotion(newEmotions[0]);
+    // Sort emotions by score in descending order
+    const sortedEmotions = [...newEmotions].sort((a, b) => b.score - a.score);
+    setEmotions(sortedEmotions);
+    if (sortedEmotions.length > 0) {
+      setPrimaryEmotion(sortedEmotions[0]);
     }
   };
 

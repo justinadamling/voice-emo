@@ -11,22 +11,19 @@ interface RecordingSectionProps {
 export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [chunkCount, setChunkCount] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const chunkCountRef = useRef<number>(0);
   const toast = useToast();
 
-  // Process chunks when we have enough for a valid WebM file
-  const processChunks = async () => {
-    if (chunksRef.current.length === 0) return;
-
+  // Process a single chunk immediately
+  const processChunk = async (chunk: Blob) => {
     try {
-      // Combine a few chunks to make a valid WebM file
-      const combinedBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-      console.log(`Processing chunks, total size: ${combinedBlob.size} bytes`);
+      setIsAnalyzing(true);
+      console.log(`Processing chunk of size: ${chunk.size} bytes`);
       
       const formData = new FormData();
-      formData.append('file', combinedBlob, 'audio.webm');
+      formData.append('file', chunk, 'audio.webm');
 
       const response = await fetch('http://localhost:8000/analyze', {
         method: 'POST',
@@ -41,11 +38,17 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
       if (onEmotionsUpdate && data.emotions) {
         onEmotionsUpdate(data.emotions);
       }
-
-      // Clear processed chunks
-      chunksRef.current = [];
     } catch (error) {
-      console.error('Error processing chunks:', error);
+      console.error('Error processing chunk:', error);
+      toast({
+        title: 'Processing error',
+        description: error instanceof Error ? error.message : 'Failed to process audio chunk',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -71,30 +74,23 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
         audioBitsPerSecond: 128000
       });
 
+      setChunkCount(0);
       chunksRef.current = [];
-      chunkCountRef.current = 0;
       
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0) {
-          console.log(`Received chunk of size: ${e.data.size} bytes`);
-          chunksRef.current.push(e.data);
-          chunkCountRef.current += 1;
-
-          // Process after collecting 2 chunks (6 seconds of audio)
-          if (chunkCountRef.current >= 2) {
-            await processChunks();
-            chunkCountRef.current = 0;
-          }
+          setChunkCount(prev => prev + 1);
+          await processChunk(e.data);
         }
       };
 
-      recorder.start(3000); // Collect 3-second chunks
+      recorder.start(3000); // Process every 3 seconds
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
       
       toast({
         title: 'Recording started',
-        description: 'Recording audio...',
+        description: 'Recording and analyzing your voice...',
         status: 'info',
         duration: 2000,
         isClosable: true,
@@ -119,7 +115,7 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
       
       // Process any remaining chunks
       if (chunksRef.current.length > 0) {
-        processChunks();
+        processChunk(chunksRef.current[chunksRef.current.length - 1]);
       }
       
       toast({
@@ -152,12 +148,23 @@ export const RecordingSection = ({ onEmotionsUpdate }: RecordingSectionProps) =>
         disabled={isAnalyzing}
       >
         <div className="flex items-center justify-center gap-2">
-          {isRecording && <Badge variant="error">Recording & Processing</Badge>}
+          {isRecording && (
+            <>
+              <Badge variant="error">Recording</Badge>
+              {isAnalyzing && <Badge variant="warning">Analyzing</Badge>}
+              <Badge variant="neutral">Chunk {chunkCount}</Badge>
+            </>
+          )}
           <span className="text-body font-body">
             {isRecording ? 'Stop Recording' : 'Start Recording'}
           </span>
         </div>
       </button>
+      {isAnalyzing && (
+        <div className="text-sm text-gray-600">
+          Analyzing audio chunk {chunkCount}... This takes about 5 seconds.
+        </div>
+      )}
     </div>
   );
 }; 
