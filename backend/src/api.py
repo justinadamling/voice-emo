@@ -14,6 +14,8 @@ import subprocess
 from pydub import AudioSegment
 from fastapi import Request
 from typing import Optional
+import signal
+import sys
 
 # Set up logging with more detailed format
 logging.basicConfig(
@@ -36,6 +38,23 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"]
 )
+
+# Add signal handlers for graceful shutdown
+def signal_handler(signum, frame):
+    logger.info("Received shutdown signal, cleaning up...")
+    # Clean up any temporary files
+    temp_dir = tempfile.gettempdir()
+    for filename in os.listdir(temp_dir):
+        if filename.startswith('tmp') and (filename.endswith('.wav') or filename.endswith('.webm')):
+            try:
+                os.remove(os.path.join(temp_dir, filename))
+                logger.info(f"Cleaned up {filename}")
+            except Exception as e:
+                logger.error(f"Error cleaning up {filename}: {e}")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Add after other global variables
 webm_header: Optional[bytes] = None
@@ -70,13 +89,31 @@ async def analyze_audio(request: Request):
         # Analyze prosody
         result = await analyze_prosody(audio)
         analysis_time = time.time()
+        total_time = analysis_time - start_time
+        
+        # Add timing information to result
+        result["timing"] = {
+            "file_save": save_time - start_time,
+            "processing": process_time - save_time,
+            "analysis": {
+                "total": analysis_time - process_time,
+                "submit": result.get("timing", {}).get("submit", 0),
+                "poll": result.get("timing", {}).get("poll", 0),
+                "predict": result.get("timing", {}).get("predict", 0)
+            },
+            "total": total_time
+        }
         
         # Log summary
         logger.info("\n🎯 Analysis Summary:")
         logger.info(f"   - File Save: {save_time - start_time:.2f}s")
         logger.info(f"   - Processing: {process_time - save_time:.2f}s")
-        logger.info(f"   - Analysis: {analysis_time - process_time:.2f}s")
-        logger.info(f"   - Total Time: {analysis_time - start_time:.2f}s")
+        logger.info(f"   - Analysis:")
+        logger.info(f"     • Submit: {result['timing']['analysis']['submit']:.2f}s")
+        logger.info(f"     • Poll: {result['timing']['analysis']['poll']:.2f}s")
+        logger.info(f"     • Predict: {result['timing']['analysis']['predict']:.2f}s")
+        logger.info(f"     • Total: {result['timing']['analysis']['total']:.2f}s")
+        logger.info(f"   - Total Time: {total_time:.2f}s")
         logger.info(f"   - Audio Duration: {result['duration']:.1f}s")
         logger.info(f"   - Emotions Found: {len(result['emotions'])}")
         
@@ -150,6 +187,29 @@ async def process_audio(audio_data: bytes) -> AudioSegment:
         logger.error(f"Error processing audio: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Audio processing failed: {str(e)}")
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on server shutdown"""
+    logger.info("Server shutting down, cleaning up...")
+    # Clean up any temporary files
+    temp_dir = tempfile.gettempdir()
+    for filename in os.listdir(temp_dir):
+        if filename.startswith('tmp') and (filename.endswith('.wav') or filename.endswith('.webm')):
+            try:
+                os.remove(os.path.join(temp_dir, filename))
+                logger.info(f"Cleaned up {filename}")
+            except Exception as e:
+                logger.error(f"Error cleaning up {filename}: {e}")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info") 
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_level="info",
+        timeout_keep_alive=30,  # Reduce keep-alive timeout
+        limit_concurrency=10,   # Limit concurrent connections
+    )
+    server = uvicorn.Server(config)
+    server.run() 

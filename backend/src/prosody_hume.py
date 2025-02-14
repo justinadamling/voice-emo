@@ -40,11 +40,9 @@ class EmotionEmbeddingItem:
 
 def get_api_key():
     key = os.getenv('HUME_API_KEY')
-    print(f"\n=== API Key Debug Info ===")
-    print(f"API Key from env: {key}")
-    print(f"API Key length: {len(key) if key else 'None'}")
-    print(f"Environment variables: {dict(os.environ)}")
-    print("========================\n")
+    # Only log the length and first/last 4 chars of the key
+    masked_key = f"{key[:4]}...{key[-4:]}" if key else None
+    logger.info(f"✅ API Key loaded (length: {len(key) if key else 0})")
     return key
 
 def validate_wav_file(filename):
@@ -141,16 +139,7 @@ def transcribe_audio(audio_file: str) -> str:
 async def analyze_prosody(audio: AudioSegment) -> dict:
     """
     Analyze prosody in an audio segment using Hume API.
-    
-    Args:
-        audio (AudioSegment): The audio segment to analyze.
-        
-    Returns:
-        dict: A dictionary containing:
-            - emotions: List of EmotionEmbeddingItem objects with emotion scores
-            - duration: Duration of the audio in seconds
     """
-    # Save audio segment to temporary WAV file
     temp_wav = os.path.join(tempfile.gettempdir(), f'tmp{uuid.uuid4().hex}.wav')
     try:
         # Export audio with correct parameters
@@ -164,9 +153,9 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
         }
         url = "https://api.hume.ai/v0/batch/jobs"
         
-        # Debug logging
-        logger.info(f"🔑 Using API key: {api_key}")
-        logger.info(f"📨 Headers being sent: {headers}")
+        # Debug logging without exposing the key
+        logger.info("🔑 Using API key (masked)")
+        logger.info("📨 Headers prepared for API request")
         
         # Create request payload with minimal settings
         config = {
@@ -179,6 +168,9 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
         
         # Submit and monitor job
         async with aiohttp.ClientSession() as session:
+            # Track submission time
+            submit_start = time.time()
+            
             # Submit job
             logger.info("📤 Submitting prosody analysis job...")
             data = aiohttp.FormData()
@@ -192,10 +184,15 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
                 
                 response_data = await response.json()
                 job_id = response_data["job_id"]
+                submit_time = time.time() - submit_start
                 logger.info(f"✅ Job submitted. ID: {job_id}")
                 
-                # Poll for completion
-                while True:
+                # Track polling time
+                poll_start = time.time()
+                
+                # Poll for completion with timeout
+                timeout = time.time() + 30  # 30 second timeout
+                while time.time() < timeout:
                     async with session.get(f"{url}/{job_id}", headers=headers) as status_response:
                         if status_response.status != 200:
                             error_text = await status_response.text()
@@ -211,6 +208,13 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
                             raise Exception("Prosody analysis job failed")
                         
                         await asyncio.sleep(0.5)  # Poll frequently for faster response
+                else:
+                    raise Exception("Job timed out after 30 seconds")
+                
+                poll_time = time.time() - poll_start
+                
+                # Track prediction fetch time
+                predict_start = time.time()
                 
                 # Get predictions
                 async with session.get(f"{url}/{job_id}/predictions", headers=headers) as pred_response:
@@ -219,16 +223,22 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
                         raise Exception(f"Failed to get predictions: {error_text}")
                     
                     predictions = await pred_response.json()
+                    predict_time = time.time() - predict_start
                     
                     if not predictions:
                         logger.warning("No predictions returned from the API")
                         return {
                             "emotions": [],
-                            "duration": len(audio) / 1000.0
+                            "duration": len(audio) / 1000.0,
+                            "timing": {
+                                "submit": submit_time,
+                                "poll": poll_time,
+                                "predict": predict_time
+                            }
                         }
                     
                     try:
-                        # Get emotions from first prediction
+                        # Process predictions
                         prediction = predictions[0]
                         results = prediction.get("results", {})
                         prosody_data = results.get("predictions", [{}])[0].get("models", {}).get("prosody", {})
@@ -248,17 +258,20 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
                         
                         return {
                             "emotions": emotions,
-                            "duration": len(audio) / 1000.0
+                            "duration": len(audio) / 1000.0,
+                            "timing": {
+                                "submit": submit_time,
+                                "poll": poll_time,
+                                "predict": predict_time
+                            }
                         }
                         
                     except Exception as e:
                         logger.error(f"Error processing predictions: {str(e)}")
                         raise Exception(f"Failed to process predictions: {str(e)}")
-                    
     except Exception as e:
         logger.error(f"❌ Error in prosody analysis: {str(e)}")
         raise e
-    
     finally:
         # Clean up temporary file
         if os.path.exists(temp_wav):

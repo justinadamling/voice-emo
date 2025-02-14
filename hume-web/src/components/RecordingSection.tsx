@@ -143,7 +143,7 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
   };
 
   // Process the complete audio file for final results
-  const processCompleteAudio = async (chunks: Blob[]) => {
+  const processCompleteAudio = async (chunks: Blob[], uxStartTime: number) => {
     try {
       setIsProcessing(true);
       
@@ -176,6 +176,24 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
       if (onEmotionsUpdate && data.emotions) {
         onEmotionsUpdate(data.emotions, true); // true indicates this is final
       }
+
+      // Calculate and log UX speed
+      const uxEndTime = Date.now();
+      const uxSpeed = (uxEndTime - uxStartTime) / 1000;
+      console.log('🎯 UX Speed:', uxSpeed.toFixed(2), 'seconds');
+      console.log('🎯 Backend Timing:', data.timing);
+      
+      toast({
+        title: 'Analysis Complete',
+        description: `Total: ${uxSpeed.toFixed(1)}s
+Backend: ${data.timing.total.toFixed(1)}s
+• Submit: ${data.timing.analysis.submit.toFixed(1)}s
+• Poll: ${data.timing.analysis.poll.toFixed(1)}s
+• Predict: ${data.timing.analysis.predict.toFixed(1)}s`,
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
     } catch (error) {
       console.error('Error processing audio:', error);
       toast({
@@ -263,6 +281,10 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
 
   const stopRecording = async () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      // Start UX speed timing
+      const uxStartTime = Date.now();
+      console.log('🕒 UX Speed Tracking - Start:', uxStartTime);
+      
       // Stop recording
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
@@ -275,16 +297,8 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
       
       // Process complete audio for final analysis
       if (chunksRef.current.length > 0) {
-        await processCompleteAudio(chunksRef.current);
+        await processCompleteAudio(chunksRef.current, uxStartTime);
       }
-      
-      toast({
-        title: 'Recording complete',
-        description: 'Processing final analysis...',
-        status: 'info',
-        duration: 2000,
-        isClosable: true,
-      });
     }
   };
 
