@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 import { Emotion } from '../types/emotion';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class SheetsService {
   static async storeEmotionData(text: string, emotions: any, context: string = '') {
@@ -103,7 +103,7 @@ export class SheetsDB {
       ];
 
       // Add emotion values in the same order as headers
-      headers.slice(4).forEach(header => {
+      headers.slice(4).forEach((header: string) => {
         rowData.push(emotionDict[header] || 0.0);
       });
 
