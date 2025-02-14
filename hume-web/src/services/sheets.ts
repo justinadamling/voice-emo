@@ -115,7 +115,7 @@ export class SheetsDB {
       ];
 
       // Add emotion values in the same order as headers
-      headerRow.slice(4).forEach(header => {
+      headerRow.slice(4).forEach((header: string): void => {
         rowData.push(emotionDict[header] || 0.0);
       });
 
