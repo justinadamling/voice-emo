@@ -96,8 +96,10 @@ export class SheetsDB {
         spreadsheetId: this.spreadsheetId,
         range: '1:1'
       });
-      const headers: string[] = headerResponse.data.values?.[0] || [];
-
+      
+      // Explicitly type the header array from the start
+      const headerRow: string[] = headerResponse.data.values?.[0] ?? [];
+      
       // Create row data matching the sheet structure
       const rowData: (string | number)[] = [
         timestamp,
@@ -107,7 +109,7 @@ export class SheetsDB {
       ];
 
       // Add emotion values in the same order as headers
-      headers.slice(4).forEach((header: string): void => {
+      headerRow.slice(4).forEach(header => {  // Type inference should work now
         rowData.push(emotionDict[header] || 0.0);
       });
 
