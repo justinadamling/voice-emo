@@ -6,6 +6,12 @@ interface EmotionDictionary {
   [key: string]: number;
 }
 
+interface SheetResponse {
+  data: {
+    values?: string[][];
+  };
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class SheetsService {
@@ -79,7 +85,7 @@ export class SheetsDB {
 
       // Prepare row data
       const timestamp = new Date().toISOString().split('T')[0];
-      const response = await this.sheets.spreadsheets.values.get({
+      const response: SheetResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
         range: 'A:A'
       });
@@ -92,7 +98,7 @@ export class SheetsDB {
       });
 
       // Get headers to know which emotions to include
-      const headerResponse = await this.sheets.spreadsheets.values.get({
+      const headerResponse: SheetResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
         range: '1:1'
       });
@@ -109,7 +115,7 @@ export class SheetsDB {
       ];
 
       // Add emotion values in the same order as headers
-      headerRow.slice(4).forEach(header => {  // Type inference should work now
+      headerRow.slice(4).forEach(header => {
         rowData.push(emotionDict[header] || 0.0);
       });
 
