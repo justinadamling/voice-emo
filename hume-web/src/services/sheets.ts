@@ -2,6 +2,10 @@ import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 import { Emotion } from '../types/emotion';
 
+interface EmotionDictionary {
+  [key: string]: number;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class SheetsService {
@@ -82,7 +86,7 @@ export class SheetsDB {
       const transcriptId = `T${String(response.data.values?.length || 0).padStart(3, '0')}`;
 
       // Convert emotions array to dictionary
-      const emotionDict: { [key: string]: number } = {};
+      const emotionDict: EmotionDictionary = {};
       emotions.forEach(emotion => {
         emotionDict[emotion.name] = emotion.score;
       });
@@ -92,10 +96,10 @@ export class SheetsDB {
         spreadsheetId: this.spreadsheetId,
         range: '1:1'
       });
-      const headers = headerResponse.data.values?.[0] || [];
+      const headers: string[] = headerResponse.data.values?.[0] || [];
 
       // Create row data matching the sheet structure
-      const rowData = [
+      const rowData: (string | number)[] = [
         timestamp,
         transcriptId,
         text,
@@ -103,7 +107,7 @@ export class SheetsDB {
       ];
 
       // Add emotion values in the same order as headers
-      headers.slice(4).forEach((header: string) => {
+      headers.slice(4).forEach((header: string): void => {
         rowData.push(emotionDict[header] || 0.0);
       });
 
