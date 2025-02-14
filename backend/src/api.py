@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Configure CORS with more permissive settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -84,16 +84,6 @@ async def analyze_audio(request: Request):
         
     except Exception as e:
         logger.error(f"❌ Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/latest-entries")
-async def get_latest_entries(limit: int = 10):
-    if not sheets_db:
-        return {"entries": []}
-    try:
-        entries = await sheets_db.get_latest_entries(limit)
-        return {"entries": entries}
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 async def process_audio(audio_data: bytes) -> AudioSegment:
@@ -158,4 +148,8 @@ async def process_audio(audio_data: bytes) -> AudioSegment:
                 
     except Exception as e:
         logger.error(f"Error processing audio: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Audio processing failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Audio processing failed: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info") 

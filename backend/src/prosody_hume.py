@@ -23,13 +23,14 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 env_path = Path(__file__).parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
+load_dotenv(dotenv_path=env_path, override=True)
 
 # Verify API key is loaded
 api_key = os.getenv('HUME_API_KEY')
 if not api_key:
     raise ValueError("HUME_API_KEY not found in environment variables")
 logger.info("✅ HUME_API_KEY loaded from environment")
+logger.info(f"✅ API Key length: {len(api_key)}")  # Don't log the full key for security
 
 @dataclass
 class EmotionEmbeddingItem:
@@ -158,9 +159,14 @@ async def analyze_prosody(audio: AudioSegment) -> dict:
         
         # Set up API request
         headers = {
-            "X-API-Key": api_key
+            "accept": "application/json",
+            "X-Hume-Api-Key": api_key
         }
         url = "https://api.hume.ai/v0/batch/jobs"
+        
+        # Debug logging
+        logger.info(f"🔑 Using API key: {api_key}")
+        logger.info(f"📨 Headers being sent: {headers}")
         
         # Create request payload with minimal settings
         config = {
