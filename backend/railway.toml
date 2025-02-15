@@ -20,7 +20,16 @@ echo "Listing current directory:" &&
 ls -la &&
 echo "Starting uvicorn..." &&
 PORT=${PORT:-8000} &&
-PYTHONUNBUFFERED=1 RAILWAY_ENVIRONMENT=true uvicorn api:app --host 0.0.0.0 --port $PORT --log-level debug 2>&1 | tee -a app.log
+{
+    PYTHONUNBUFFERED=1 RAILWAY_ENVIRONMENT=true uvicorn api:app --host 0.0.0.0 --port $PORT --log-level debug 2>&1 | tee -a app.log
+    exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Application failed to start with exit code $exit_code"
+        echo "Last 50 lines of app.log:"
+        tail -n 50 app.log
+        exit $exit_code
+    fi
+}
 '
 """
 restartPolicyType = "on_failure"

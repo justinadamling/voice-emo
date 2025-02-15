@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 import tempfile
 import shutil
@@ -12,7 +13,6 @@ import time
 import uuid
 import subprocess
 from pydub import AudioSegment
-from fastapi import Request
 from typing import Optional
 import signal
 import sys
@@ -20,12 +20,10 @@ import traceback
 
 # Set up logging with more detailed format
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed to DEBUG for more detailed logs
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        # Stdout handler
         logging.StreamHandler(sys.stdout),
-        # File handler (for local debugging)
         logging.FileHandler('app.log') if not os.getenv('RAILWAY_ENVIRONMENT') else logging.NullHandler()
     ]
 )
@@ -42,10 +40,22 @@ uvicorn_access_logger.handlers = []
 for handler in logging.getLogger().handlers:
     uvicorn_access_logger.addHandler(handler)
 
+logger = logging.getLogger(__name__)
+
+# Create FastAPI app with custom error handling
+app = FastAPI()
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception handler caught: {str(exc)}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"}
+    )
+
 # Load environment variables from .env file
 try:
     load_dotenv()
-    logger = logging.getLogger(__name__)
     logger.info("=== Application Starting ===")
     logger.info(f"Running in Railway: {'RAILWAY_ENVIRONMENT' in os.environ}")
     logger.info("Environment variables loaded successfully")
@@ -57,10 +67,13 @@ except Exception as e:
     logger.error(f"Error loading environment: {str(e)}\n{traceback.format_exc()}")
     raise
 
-app = FastAPI()
-
 # Get allowed origins from environment variable or use defaults
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
+try:
+    ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
+    logger.info(f"Parsed ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
+except Exception as e:
+    logger.error(f"Error parsing ALLOWED_ORIGINS: {str(e)}\n{traceback.format_exc()}")
+    raise
 
 # Configure CORS with more permissive settings
 try:
@@ -76,6 +89,23 @@ try:
 except Exception as e:
     logger.error(f"Error configuring CORS: {str(e)}\n{traceback.format_exc()}")
     raise
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests and their responses"""
+    start_time = time.time()
+    
+    try:
+        logger.info(f"Incoming {request.method} request to {request.url}")
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logger.info(f"Request completed in {process_time:.2f}s with status {response.status_code}")
+        return response
+    except Exception as e:
+        logger.error(f"Request failed: {str(e)}\n{traceback.format_exc()}")
+        process_time = time.time() - start_time
+        logger.error(f"Request failed after {process_time:.2f}s")
+        raise
 
 # Add signal handlers for graceful shutdown
 def signal_handler(signum, frame):
