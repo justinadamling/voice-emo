@@ -1,11 +1,26 @@
 [build]
 builder = "nixpacks"
-buildCommand = "pip install -r requirements.txt"
+buildCommand = """
+echo "Installing requirements..." &&
+pip install -r requirements.txt &&
+echo "Verifying installation:" &&
+pip list
+"""
 
 [nixpacks]
 setup = ["python311", "gcc", "python3-dev", "pkg-config", "ffmpeg", "portaudio19-dev", "libasound2-dev"]
 
 [deploy]
-startCommand = "bash -c 'PORT=${PORT:-8000} && uvicorn api:app --host 0.0.0.0 --port $PORT'"
+startCommand = """
+bash -c '
+echo "Current directory: $(pwd)" &&
+echo "Python version: $(python --version)" &&
+echo "Listing current directory:" &&
+ls -la &&
+echo "Starting uvicorn..." &&
+PORT=${PORT:-8000} &&
+uvicorn api:app --host 0.0.0.0 --port $PORT --log-level debug
+'
+"""
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10 

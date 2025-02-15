@@ -16,45 +16,64 @@ from fastapi import Request
 from typing import Optional
 import signal
 import sys
+import traceback
 
 # Set up logging with more detailed format
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG,  # Changed to DEBUG for more detailed logs
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
 # Load environment variables from .env file
-load_dotenv()
+try:
+    load_dotenv()
+    logger = logging.getLogger(__name__)
+    logger.info("Environment variables loaded successfully")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Files in current directory: {os.listdir('.')}")
+    logger.info(f"ALLOWED_ORIGINS: {os.getenv('ALLOWED_ORIGINS')}")
+    logger.info(f"PORT: {os.getenv('PORT')}")
+except Exception as e:
+    logger.error(f"Error loading environment: {str(e)}\n{traceback.format_exc()}")
+    raise
 
 app = FastAPI()
-logger = logging.getLogger(__name__)
 
 # Get allowed origins from environment variable or use defaults
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
 
 # Configure CORS with more permissive settings
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
+try:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"]
+    )
+    logger.info("CORS middleware configured successfully")
+except Exception as e:
+    logger.error(f"Error configuring CORS: {str(e)}\n{traceback.format_exc()}")
+    raise
 
 # Add signal handlers for graceful shutdown
 def signal_handler(signum, frame):
-    logger.info("Received shutdown signal, cleaning up...")
-    # Clean up any temporary files
-    temp_dir = tempfile.gettempdir()
-    for filename in os.listdir(temp_dir):
-        if filename.startswith('tmp') and (filename.endswith('.wav') or filename.endswith('.webm')):
-            try:
-                os.remove(os.path.join(temp_dir, filename))
-                logger.info(f"Cleaned up {filename}")
-            except Exception as e:
-                logger.error(f"Error cleaning up {filename}: {e}")
-    sys.exit(0)
+    logger.info(f"Received signal {signum}, cleaning up...")
+    try:
+        temp_dir = tempfile.gettempdir()
+        for filename in os.listdir(temp_dir):
+            if filename.startswith('tmp') and (filename.endswith('.wav') or filename.endswith('.webm')):
+                try:
+                    os.remove(os.path.join(temp_dir, filename))
+                    logger.info(f"Cleaned up {filename}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up {filename}: {e}")
+        logger.info("Cleanup completed, shutting down...")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {str(e)}\n{traceback.format_exc()}")
+    finally:
+        sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -62,9 +81,64 @@ signal.signal(signal.SIGTERM, signal_handler)
 # Add after other global variables
 webm_header: Optional[bytes] = None
 
+@app.on_event("startup")
+async def startup_event():
+    """Log diagnostic information on startup"""
+    try:
+        logger.info("=== Application Startup Diagnostics ===")
+        logger.info(f"Python version: {sys.version}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Directory contents: {os.listdir('.')}")
+        logger.info(f"Environment variables: {dict(os.environ)}")
+        
+        # Check for required dependencies
+        try:
+            subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+            logger.info("FFmpeg is available")
+        except Exception as e:
+            logger.error(f"FFmpeg check failed: {str(e)}")
+        
+        # Test audio processing capabilities
+        try:
+            AudioSegment.from_wav
+            logger.info("pydub is properly configured")
+        except Exception as e:
+            logger.error(f"pydub check failed: {str(e)}")
+            
+        logger.info("=== Startup Diagnostics Complete ===")
+    except Exception as e:
+        logger.error(f"Error during startup diagnostics: {str(e)}\n{traceback.format_exc()}")
+        raise
+
 @app.get("/test")
 async def test_endpoint():
-    return {"status": "ok", "message": "Server is running"}
+    """Enhanced test endpoint with diagnostics"""
+    try:
+        # Collect system information
+        info = {
+            "status": "ok",
+            "message": "Server is running",
+            "python_version": sys.version,
+            "current_directory": os.getcwd(),
+            "environment": {
+                "PORT": os.getenv("PORT"),
+                "HOST": os.getenv("HOST"),
+                "ALLOWED_ORIGINS": ALLOWED_ORIGINS,
+            }
+        }
+        
+        # Test FFmpeg
+        try:
+            ffmpeg_version = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+            info["ffmpeg"] = "available"
+        except Exception as e:
+            info["ffmpeg"] = f"error: {str(e)}"
+            
+        logger.info(f"Test endpoint accessed, diagnostics: {info}")
+        return info
+    except Exception as e:
+        logger.error(f"Error in test endpoint: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze")
 async def analyze_audio(request: Request):
