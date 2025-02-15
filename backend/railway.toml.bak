@@ -1,0 +1,27 @@
+[build]
+builder = "nixpacks"
+buildCommand = """
+echo "Installing requirements..." &&
+pip install -r requirements.txt &&
+echo "Verifying installation:" &&
+pip list
+"""
+
+[nixpacks]
+setup = ["python311", "gcc", "python3-dev", "pkg-config", "ffmpeg", "portaudio19-dev", "libasound2-dev"]
+
+[deploy]
+startCommand = """
+bash -c '
+echo "=== Starting Application ===" &&
+echo "Current directory: $(pwd)" &&
+echo "Python version: $(python --version)" &&
+echo "Listing current directory:" &&
+ls -la &&
+echo "Starting uvicorn..." &&
+echo "Using PORT from Railway: ${PORT}" &&
+PYTHONUNBUFFERED=1 RAILWAY_ENVIRONMENT=true uvicorn api:app --host 0.0.0.0 --port ${PORT} --log-level debug 2>&1 | tee -a app.log
+'
+"""
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10 
