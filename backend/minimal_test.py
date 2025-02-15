@@ -164,21 +164,26 @@ async def ping():
 
 if __name__ == "__main__":
     try:
-        # Try different environment variables for port
-        port = None
-        for port_var in ["PORT", "RAILWAY_PORT"]:
-            port_val = os.getenv(port_var)
-            if port_val:
-                try:
-                    port = int(port_val)
-                    logger.info(f"Using port from {port_var}: {port}")
-                    break
-                except ValueError:
-                    logger.warning(f"Invalid port value in {port_var}: {port_val}")
-        
-        if port is None:
+        # In production (Railway), always use port 8080
+        if os.getenv("RAILWAY_ENVIRONMENT") == "production":
             port = 8080
-            logger.info(f"No valid port found in environment, using default: {port}")
+            logger.info("Running in Railway production - using port 8080")
+        else:
+            # For local development, try environment variables
+            port = None
+            for port_var in ["PORT", "RAILWAY_PORT"]:
+                port_val = os.getenv(port_var)
+                if port_val:
+                    try:
+                        port = int(port_val)
+                        logger.info(f"Using port from {port_var}: {port}")
+                        break
+                    except ValueError:
+                        logger.warning(f"Invalid port value in {port_var}: {port_val}")
+            
+            if port is None:
+                port = 8000  # Default to 8000 for local development
+                logger.info(f"No valid port found in environment, using default: {port}")
         
         logger.info(f"Starting server on port {port}...")
         uvicorn.run(app, host="0.0.0.0", port=port)
