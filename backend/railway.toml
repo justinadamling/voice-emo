@@ -3,6 +3,18 @@ builder = "nixpacks"
 buildCommand = "pip install fastapi uvicorn"
 
 [deploy]
-startCommand = "bash -c 'uvicorn minimal_test:app --host 0.0.0.0 --port ${PORT}'"
+startCommand = """
+bash -c '
+echo "=== Debug Info ===" &&
+echo "PORT=${PORT}" &&
+echo "PWD=$(pwd)" &&
+echo "Memory Info:" &&
+free -m &&
+echo "Starting server..." &&
+exec uvicorn minimal_test:app --host 0.0.0.0 --port ${PORT} --timeout-keep-alive 75 --log-level debug --limit-max-requests 0
+'
+"""
+healthcheckPath = "/"
+healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3 

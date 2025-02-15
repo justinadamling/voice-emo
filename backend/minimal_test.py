@@ -1,12 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 import uvicorn
 import signal
 import sys
 import logging
+import os
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed to DEBUG for more details
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -24,6 +25,9 @@ signal.signal(signal.SIGINT, handle_signal)
 @app.on_event("startup")
 async def startup_event():
     logger.info("=== Application starting up ===")
+    logger.info(f"Environment: {dict(os.environ)}")
+    logger.info(f"Current directory: {os.getcwd()}")
+    logger.info(f"Files in directory: {os.listdir('.')}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -31,8 +35,29 @@ async def shutdown_event():
 
 @app.get("/")
 async def root():
-    logger.info("Root endpoint accessed")
-    return {"message": "Hello World"}
+    """Root endpoint with detailed response"""
+    try:
+        port = os.getenv("PORT", "Not set")
+        pwd = os.getcwd()
+        logger.info(f"Root endpoint accessed. PORT={port}, PWD={pwd}")
+        return {
+            "status": "ok",
+            "message": "Hello World",
+            "port": port,
+            "directory": pwd
+        }
+    except Exception as e:
+        logger.error(f"Error in root endpoint: {str(e)}")
+        return Response(
+            content=str(e),
+            status_code=500
+        )
+
+@app.get("/_health")
+async def health():
+    """Health check endpoint that Railway might be trying to access"""
+    logger.info("Health check endpoint accessed")
+    return {"status": "healthy"}
 
 @app.get("/ping")
 async def ping():
