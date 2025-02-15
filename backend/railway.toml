@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "pip install -r requirements.txt"
 
 [nixpacks]
-setup = ["python311", "gcc", "python3-dev", "pkg-config"]
+setup = ["python311", "gcc", "python3-dev", "pkg-config", "ffmpeg"]
 
 [deploy]
 startCommand = "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"
