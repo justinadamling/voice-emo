@@ -6,6 +6,6 @@ buildCommand = "pip install -r requirements.txt"
 setup = ["python311", "gcc", "python3-dev", "pkg-config", "ffmpeg", "portaudio19-dev", "libasound2-dev"]
 
 [deploy]
-startCommand = "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"
+startCommand = "bash -c 'PORT=${PORT:-8000} && uvicorn api:app --host 0.0.0.0 --port $PORT'"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10 
