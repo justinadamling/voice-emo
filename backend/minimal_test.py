@@ -87,23 +87,8 @@ async def shutdown_event():
 
 @app.get("/")
 async def root():
-    """Root endpoint with detailed response"""
-    try:
-        port = os.getenv("PORT", "Not set")
-        pwd = os.getcwd()
-        logger.info(f"Root endpoint accessed. PORT={port}, PWD={pwd}")
-        return {
-            "status": "ok",
-            "message": "Hello World",
-            "port": port,
-            "directory": pwd
-        }
-    except Exception as e:
-        logger.error(f"Error in root endpoint: {str(e)}")
-        return Response(
-            content=str(e),
-            status_code=500
-        )
+    """Root endpoint with minimal response for health checks"""
+    return {"status": "ok"}
 
 @app.get("/_health")
 async def health():
