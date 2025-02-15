@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import signal
 import sys
@@ -16,6 +17,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# Parse ALLOWED_ORIGINS
+try:
+    raw_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001')
+    ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins.split(',') if origin.strip()]
+    logger.info(f"Configured CORS with origins: {ALLOWED_ORIGINS}")
+except Exception as e:
+    logger.error(f"Error parsing ALLOWED_ORIGINS: {str(e)}")
+    ALLOWED_ORIGINS = ["*"]
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Signal handling
 def handle_signal(signum, frame):
