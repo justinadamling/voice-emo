@@ -5,6 +5,11 @@ builder = "nixpacks"
 setup = ["python311", "gcc", "ffmpeg"]
 install = ["python -m pip install --upgrade pip", "pip install -r requirements.txt"]
 
+# Specify the source directory
+[build.copy]
+source = "src"
+destination = "/app/src"
+
 [deploy]
 startCommand = "uvicorn src.api:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "on_failure"
