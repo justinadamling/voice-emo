@@ -29,10 +29,13 @@ load_dotenv()
 app = FastAPI()
 logger = logging.getLogger(__name__)
 
+# Get allowed origins from environment variable or use defaults
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
+
 # Configure CORS with more permissive settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
