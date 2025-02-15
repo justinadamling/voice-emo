@@ -32,8 +32,16 @@ async def startup_event():
         memory = psutil.virtual_memory()
         logger.info(f"Memory Info: Total={memory.total/1024/1024:.1f}MB, Available={memory.available/1024/1024:.1f}MB")
         
-        # Environment info
-        logger.info(f"PORT environment variable: {os.getenv('PORT', 'Not set')}")
+        # Enhanced environment info
+        port = os.getenv("PORT", "Not set")
+        railway_port = os.getenv("RAILWAY_PORT", "Not set")
+        railway_static_url = os.getenv("RAILWAY_STATIC_URL", "Not set")
+        logger.info("=== Environment Variables ===")
+        logger.info(f"PORT={port}")
+        logger.info(f"RAILWAY_PORT={railway_port}")
+        logger.info(f"RAILWAY_STATIC_URL={railway_static_url}")
+        logger.info(f"All env vars: {dict(os.environ)}")
+        
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Files in directory: {os.listdir('.')}")
         
@@ -108,12 +116,24 @@ async def ping():
 
 if __name__ == "__main__":
     try:
-        port = int(os.getenv("PORT", "8080"))
+        # Try different environment variables for port
+        port = None
+        for port_var in ["PORT", "RAILWAY_PORT"]:
+            port_val = os.getenv(port_var)
+            if port_val:
+                try:
+                    port = int(port_val)
+                    logger.info(f"Using port from {port_var}: {port}")
+                    break
+                except ValueError:
+                    logger.warning(f"Invalid port value in {port_var}: {port_val}")
+        
+        if port is None:
+            port = 8080
+            logger.info(f"No valid port found in environment, using default: {port}")
+        
         logger.info(f"Starting server on port {port}...")
         uvicorn.run(app, host="0.0.0.0", port=port)
-    except ValueError as e:
-        logger.error(f"Invalid PORT value: {os.getenv('PORT')}")
-        sys.exit(1)
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         logger.error(traceback.format_exc())
