@@ -107,5 +107,14 @@ async def ping():
     return {"status": "ok", "message": "pong"}
 
 if __name__ == "__main__":
-    logger.info("Starting server...")
-    uvicorn.run(app, host="0.0.0.0", port=8080) 
+    try:
+        port = int(os.getenv("PORT", "8080"))
+        logger.info(f"Starting server on port {port}...")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    except ValueError as e:
+        logger.error(f"Invalid PORT value: {os.getenv('PORT')}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to start server: {str(e)}")
+        logger.error(traceback.format_exc())
+        sys.exit(1) 

@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "pip install fastapi uvicorn psutil"
 
 [deploy]
-startCommand = "uvicorn minimal_test:app --host 0.0.0.0 --port $PORT --log-level debug"
+startCommand = "bash -c 'uvicorn minimal_test:app --host 0.0.0.0 --port ${PORT} --log-level debug'"
 healthcheckPath = "/_health"
 healthcheckTimeout = 10
 restartPolicyType = "on_failure"
