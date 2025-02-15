@@ -78,9 +78,28 @@ async def root():
 
 @app.get("/_health")
 async def health():
-    """Health check endpoint that Railway might be trying to access"""
-    logger.info("Health check endpoint accessed")
-    return {"status": "healthy"}
+    """Health check endpoint that Railway uses to verify the service is running"""
+    try:
+        # Quick memory check
+        import psutil
+        memory = psutil.virtual_memory()
+        
+        # Get port to verify environment
+        port = os.getenv("PORT", "Not set")
+        
+        logger.info(f"Health check accessed. Memory available: {memory.available/1024/1024:.1f}MB, PORT={port}")
+        return {
+            "status": "healthy",
+            "memory_available_mb": memory.available/1024/1024,
+            "port": port
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        logger.error(traceback.format_exc())
+        return Response(
+            content=str(e),
+            status_code=500
+        )
 
 @app.get("/ping")
 async def ping():
