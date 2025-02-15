@@ -21,13 +21,33 @@ import traceback
 # Set up logging with more detailed format
 logging.basicConfig(
     level=logging.DEBUG,  # Changed to DEBUG for more detailed logs
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # Stdout handler
+        logging.StreamHandler(sys.stdout),
+        # File handler (for local debugging)
+        logging.FileHandler('app.log') if not os.getenv('RAILWAY_ENVIRONMENT') else logging.NullHandler()
+    ]
 )
+
+# Force all uvicorn logging through our configuration
+uvicorn_logger = logging.getLogger("uvicorn")
+uvicorn_logger.handlers = []
+for handler in logging.getLogger().handlers:
+    uvicorn_logger.addHandler(handler)
+
+# Force all uvicorn.access logging through our configuration
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.handlers = []
+for handler in logging.getLogger().handlers:
+    uvicorn_access_logger.addHandler(handler)
 
 # Load environment variables from .env file
 try:
     load_dotenv()
     logger = logging.getLogger(__name__)
+    logger.info("=== Application Starting ===")
+    logger.info(f"Running in Railway: {'RAILWAY_ENVIRONMENT' in os.environ}")
     logger.info("Environment variables loaded successfully")
     logger.info(f"Current working directory: {os.getcwd()}")
     logger.info(f"Files in current directory: {os.listdir('.')}")
