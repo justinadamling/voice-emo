@@ -4,6 +4,7 @@ import signal
 import sys
 import logging
 import os
+import traceback
 
 # Set up logging
 logging.basicConfig(
@@ -25,9 +26,31 @@ signal.signal(signal.SIGINT, handle_signal)
 @app.on_event("startup")
 async def startup_event():
     logger.info("=== Application starting up ===")
-    logger.info(f"Environment: {dict(os.environ)}")
-    logger.info(f"Current directory: {os.getcwd()}")
-    logger.info(f"Files in directory: {os.listdir('.')}")
+    try:
+        # System info
+        import psutil
+        memory = psutil.virtual_memory()
+        logger.info(f"Memory Info: Total={memory.total/1024/1024:.1f}MB, Available={memory.available/1024/1024:.1f}MB")
+        
+        # Environment info
+        logger.info(f"PORT environment variable: {os.getenv('PORT', 'Not set')}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Files in directory: {os.listdir('.')}")
+        
+        # Network info
+        import socket
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        logger.info(f"Hostname: {hostname}")
+        logger.info(f"Local IP: {local_ip}")
+        
+        # Process info
+        current_process = psutil.Process()
+        logger.info(f"Process info: PID={current_process.pid}, Status={current_process.status()}")
+        
+    except Exception as e:
+        logger.error(f"Error during startup diagnostics: {str(e)}")
+        logger.error(traceback.format_exc())
 
 @app.on_event("shutdown")
 async def shutdown_event():
