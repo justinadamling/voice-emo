@@ -7,7 +7,7 @@ import logging
 from dotenv import load_dotenv
 from pathlib import Path
 import asyncio
-from prosody_hume import analyze_prosody, transcribe_audio
+from .prosody_hume import analyze_prosody, transcribe_audio
 import time
 import uuid
 import subprocess
