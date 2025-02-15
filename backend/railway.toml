@@ -1,5 +1,6 @@
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [nixpacks]
 setup = ["python311", "gcc", "ffmpeg", "portaudio19-dev", "python3-dev", "pkg-config", "libasound2-dev"]
