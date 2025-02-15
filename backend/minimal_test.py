@@ -5,6 +5,8 @@ import sys
 import logging
 import os
 import traceback
+import json
+import time
 
 # Set up logging
 logging.basicConfig(
@@ -95,18 +97,45 @@ async def health():
         # Get port to verify environment
         port = os.getenv("PORT", "Not set")
         
+        # Get Railway-specific info
+        railway_url = os.getenv("RAILWAY_STATIC_URL", "Not set")
+        railway_env = os.getenv("RAILWAY_ENVIRONMENT", "Not set")
+        
         logger.info(f"Health check accessed. Memory available: {memory.available/1024/1024:.1f}MB, PORT={port}")
-        return {
+        
+        response = {
             "status": "healthy",
             "memory_available_mb": memory.available/1024/1024,
-            "port": port
+            "port": port,
+            "railway_url": railway_url,
+            "environment": railway_env,
+            "timestamp": time.time()
         }
+        
+        return Response(
+            content=json.dumps(response),
+            media_type="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Railway-Environment": railway_env,
+                "Railway-Url": railway_url
+            }
+        )
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
         logger.error(traceback.format_exc())
         return Response(
-            content=str(e),
-            status_code=500
+            content=json.dumps({"status": "error", "error": str(e)}),
+            status_code=500,
+            media_type="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
         )
 
 @app.get("/ping")
