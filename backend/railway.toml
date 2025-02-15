@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [nixpacks]
-setup = ["python311", "gcc", "ffmpeg"]
+setup = ["python311", "gcc", "ffmpeg", "portaudio", "pkg-config", "libasound2-dev", "libportaudio2", "libportaudiocpp0", "portaudio19-dev"]
 install = ["python -m pip install --upgrade pip", "pip install -r requirements.txt"]
 
 # Specify the source directory
