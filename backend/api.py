@@ -69,14 +69,22 @@ except Exception as e:
 
 # Get allowed origins from environment variable or use defaults
 try:
-    ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001').split(',')
+    raw_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001')
+    # Clean up any malformed origins
+    ALLOWED_ORIGINS = [
+        origin.strip().rstrip(';').strip()
+        for origin in raw_origins.split(',')
+        if origin.strip()
+    ]
     logger.info(f"Parsed ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
+    logger.info(f"Raw ALLOWED_ORIGINS env var: {raw_origins}")
 except Exception as e:
     logger.error(f"Error parsing ALLOWED_ORIGINS: {str(e)}\n{traceback.format_exc()}")
     raise
 
 # Configure CORS with more permissive settings
 try:
+    logger.info("Configuring CORS with origins: {ALLOWED_ORIGINS}")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
@@ -139,9 +147,16 @@ async def startup_event():
         logger.info(f"Python version: {sys.version}")
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Directory contents: {os.listdir('.')}")
-        logger.info(f"Environment variables: {dict(os.environ)}")
+        logger.info(f"Process ID: {os.getpid()}")
+        logger.info(f"Parent Process ID: {os.getppid()}")
         
-        # Check for required dependencies
+        # Monitor memory usage
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        logger.info(f"Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
+        
+        # Check required dependencies
         try:
             subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
             logger.info("FFmpeg is available")
@@ -327,6 +342,16 @@ async def shutdown_event():
                 logger.info(f"Cleaned up {filename}")
             except Exception as e:
                 logger.error(f"Error cleaning up {filename}: {e}")
+
+# Add health check endpoint
+@app.get("/health")
+async def health_check():
+    """Basic health check endpoint"""
+    try:
+        return {"status": "healthy", "timestamp": time.time()}
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}\n{traceback.format_exc()}")
+        raise
 
 if __name__ == "__main__":
     import uvicorn
