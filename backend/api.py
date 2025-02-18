@@ -17,6 +17,7 @@ from typing import Optional
 import signal
 import sys
 import traceback
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 # Set up logging with more detailed format
 logging.basicConfig(
@@ -43,11 +44,20 @@ for handler in logging.getLogger().handlers:
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app with custom error handling
-app = FastAPI()
+app = FastAPI(root_path=os.getenv('RAILWAY_ENVIRONMENT') and "/")
+
+# Add middleware for proxy headers
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["*"]  # In production, you might want to restrict this
+)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global exception handler caught: {str(exc)}\n{traceback.format_exc()}")
+    # Log request information
+    logger.error(f"Request headers: {request.headers}")
+    logger.error(f"Request URL: {request.url}")
     return JSONResponse(
         status_code=500,
         content={"detail": f"Internal server error: {str(exc)}"}
@@ -59,10 +69,22 @@ try:
     logger.info("=== Application Starting ===")
     logger.info(f"Running in Railway: {'RAILWAY_ENVIRONMENT' in os.environ}")
     logger.info("Environment variables loaded successfully")
+    
+    # Log all port-related information
+    logger.info("=== Port Configuration ===")
+    logger.info(f"PORT from env: {os.getenv('PORT')}")
+    logger.info(f"Railway environment: {os.getenv('RAILWAY_ENVIRONMENT')}")
+    logger.info(f"Railway public domain: {os.getenv('RAILWAY_PUBLIC_DOMAIN')}")
+    logger.info(f"Railway private domain: {os.getenv('RAILWAY_PRIVATE_DOMAIN')}")
+    
+    # Check for proxy headers
+    if 'HTTP_X_FORWARDED_PORT' in os.environ:
+        logger.info(f"Forwarded port detected: {os.getenv('HTTP_X_FORWARDED_PORT')}")
+    
     logger.info(f"Current working directory: {os.getcwd()}")
     logger.info(f"Files in current directory: {os.listdir('.')}")
     logger.info(f"ALLOWED_ORIGINS: {os.getenv('ALLOWED_ORIGINS')}")
-    logger.info(f"PORT: {os.getenv('PORT')}")
+
 except Exception as e:
     logger.error(f"Error loading environment: {str(e)}\n{traceback.format_exc()}")
     raise
@@ -147,6 +169,11 @@ async def startup_event():
         logger.info(f"Python version: {sys.version}")
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Directory contents: {os.listdir('.')}")
+        logger.info(f"Environment variables:")
+        logger.info(f"PORT: {os.getenv('PORT')}")
+        logger.info(f"HOST: {os.getenv('HOST')}")
+        logger.info(f"DEBUG: {os.getenv('DEBUG')}")
+        logger.info(f"RAILWAY_ENVIRONMENT: {os.getenv('RAILWAY_ENVIRONMENT')}")
         logger.info(f"Process ID: {os.getpid()}")
         logger.info(f"Parent Process ID: {os.getppid()}")
         
@@ -392,7 +419,12 @@ startup_time = time.time()
 @app.get("/ping")
 async def ping():
     """Simple ping endpoint for health checks"""
-    return {"status": "ok", "message": "pong"}
+    try:
+        logger.info("Health check ping received")
+        return {"status": "ok", "message": "pong", "timestamp": time.time()}
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

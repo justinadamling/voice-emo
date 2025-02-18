@@ -241,6 +241,17 @@ main() {
     else
         show_success "npm found"
     fi
+
+    # Check portaudio
+    if ! brew list portaudio &>/dev/null; then
+        show_error "portaudio not found" "Installing portaudio..."
+        brew install portaudio || {
+            show_error "Failed to install portaudio"
+            prerequisites_met=false
+        }
+    else
+        show_success "portaudio found"
+    fi
     
     if [ "$prerequisites_met" = false ]; then
         printf "\n${RED}Please install the missing prerequisites and try again.${NC}\n"
@@ -363,12 +374,13 @@ main() {
     printf "${DIM}Starting backend service...${NC}"
     (cd backend && \
         source venv/bin/activate && \
-        python api.py) > /dev/null 2>&1 &
+        python api.py) 2>&1 &
     backend_pid=$!
-    sleep 2
-    if kill -0 $backend_pid 2>/dev/null; then
+    sleep 5  # Give it more time to start
+    if ps -p $backend_pid > /dev/null; then
         show_success "Backend service started"
     else
+        wait $backend_pid  # This will show us the error message
         show_error "Failed to start backend service"
         exit 1
     fi
