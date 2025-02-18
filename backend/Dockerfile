@@ -10,9 +10,6 @@ RUN apt-get update && apt-get install -y \
     libasound2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify system dependencies
-RUN ffmpeg -version
-
 # Create a non-root user
 RUN useradd -m -u 1000 appuser
 
