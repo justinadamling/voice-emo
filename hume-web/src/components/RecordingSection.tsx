@@ -23,6 +23,7 @@ interface RecordingSectionProps {
 export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: RecordingSectionProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRequestingPermissions, setIsRequestingPermissions] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -113,7 +114,7 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
       const formData = new FormData();
       formData.append('file', audioToProcess, 'chunk_audio.webm');
 
-      const response = await fetch('http://localhost:8000/analyze', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/analyze`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -158,7 +159,7 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
       const formData = new FormData();
       formData.append('file', completeAudio, 'complete_audio.webm');
 
-      const response = await fetch('http://localhost:8000/analyze', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/analyze`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -217,6 +218,9 @@ Backend: ${data.timing.total.toFixed(1)}s
       weightedEmotionsRef.current = new Map();
       webmHeaderRef.current = null;
       
+      // Set requesting permissions state
+      setIsRequestingPermissions(true);
+      
       console.log('Requesting media permissions...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -226,6 +230,9 @@ Backend: ${data.timing.total.toFixed(1)}s
           channelCount: 1
         }
       });
+
+      // Reset requesting permissions state
+      setIsRequestingPermissions(false);
 
       const mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -268,10 +275,20 @@ Backend: ${data.timing.total.toFixed(1)}s
         isClosable: true,
       });
     } catch (error) {
+      setIsRequestingPermissions(false);
       console.error('Error starting recording:', error);
+      
+      // Improve error message for permission denied
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
+          ? 'Microphone permission was denied. Please allow microphone access to record.'
+          : error.message;
+      }
+      
       toast({
         title: 'Error starting recording',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description: errorMessage,
         status: 'error',
         duration: 4000,
         isClosable: true,
@@ -328,7 +345,7 @@ Backend: ${data.timing.total.toFixed(1)}s
             ? 'bg-error-600 hover:bg-error-700' 
             : 'bg-brand-600 hover:bg-brand-700'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
-        disabled={isProcessing}
+        disabled={isProcessing || isRequestingPermissions}
       >
         <div className="flex items-center justify-center gap-2">
           {isRecording ? (
@@ -338,15 +355,22 @@ Backend: ${data.timing.total.toFixed(1)}s
             </>
           ) : isProcessing ? (
             <Badge variant="warning">Processing Final Analysis</Badge>
+          ) : isRequestingPermissions ? (
+            <Badge variant="warning">Requesting Microphone Access...</Badge>
           ) : null}
           <span className="text-body font-body">
-            {isRecording ? 'Stop Recording' : isProcessing ? 'Processing...' : 'Start Recording'}
+            {isRecording ? 'Stop Recording' : isProcessing ? 'Processing...' : isRequestingPermissions ? 'Please Allow Microphone Access' : 'Start Recording'}
           </span>
         </div>
       </button>
       {isProcessing && (
         <div className="text-sm text-gray-600">
           Processing final analysis... This may take a few seconds.
+        </div>
+      )}
+      {isRequestingPermissions && (
+        <div className="text-sm text-gray-600">
+          Please allow microphone access in your browser when prompted.
         </div>
       )}
     </div>
