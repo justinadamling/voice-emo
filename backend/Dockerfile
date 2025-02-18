@@ -34,5 +34,8 @@ USER appuser
 # Set Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1
 
+# Debug: List directory contents
+RUN ls -la /app
+
 # Command to run the application with uvicorn
-CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "$PORT"] 
+CMD uvicorn api:app --host 0.0.0.0 --port $PORT 
