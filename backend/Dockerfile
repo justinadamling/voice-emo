@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     libasound2-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Verify system dependencies
+RUN ffmpeg -version
+
 # Create a non-root user
 RUN useradd -m -u 1000 appuser
 
@@ -31,8 +34,14 @@ RUN chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Make sure the script is executable
+# Set Python to run in unbuffered mode
+ENV PYTHONUNBUFFERED=1
+
+# Default to port 8000 if not set
+ENV PORT=8000
+
+# Make script executable
 RUN chmod +x api.py
 
-# Command to run the application
-CMD ["python", "-u", "api.py"] 
+# Command to run the application with uvicorn
+CMD uvicorn api:app --host 0.0.0.0 --port $PORT 
