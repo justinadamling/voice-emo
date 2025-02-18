@@ -354,12 +354,45 @@ async def shutdown_event():
 # Add health check endpoint
 @app.get("/health")
 async def health_check():
-    """Basic health check endpoint"""
+    """Detailed health check endpoint"""
     try:
-        return {"status": "healthy", "timestamp": time.time()}
+        # Basic health metrics
+        info = {
+            "status": "healthy",
+            "timestamp": time.time(),
+            "uptime": time.time() - startup_time,
+            "environment": {
+                "python_version": sys.version,
+                "working_directory": os.getcwd(),
+            }
+        }
+        
+        # Check FFmpeg
+        try:
+            subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+            info["dependencies"] = {"ffmpeg": "available"}
+        except Exception as e:
+            info["dependencies"] = {"ffmpeg": f"error: {str(e)}"}
+            info["status"] = "degraded"
+        
+        return info
     except Exception as e:
-        logger.error(f"Health check failed: {str(e)}\n{traceback.format_exc()}")
-        raise
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "unhealthy",
+                "error": str(e)
+            }
+        )
+
+# Add startup time tracking at the top with other globals
+startup_time = time.time()
+
+@app.get("/ping")
+async def ping():
+    """Simple ping endpoint for health checks"""
+    return {"status": "ok", "message": "pong"}
 
 if __name__ == "__main__":
     import uvicorn
