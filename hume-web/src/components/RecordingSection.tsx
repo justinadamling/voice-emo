@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@chakra-ui/react';
 import { Badge } from '@/subframe/components/Badge';
+import { API_URL } from '@/config/api';
 
 interface EmotionScore {
   name: string;
@@ -114,7 +115,9 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
       const formData = new FormData();
       formData.append('file', audioToProcess, 'chunk_audio.webm');
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/analyze`, {
+      const apiUrl = `${API_URL}/analyze`;
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
         headers: {
@@ -159,7 +162,7 @@ export const RecordingSection = ({ onEmotionsUpdate, onRecordingStart }: Recordi
       const formData = new FormData();
       formData.append('file', completeAudio, 'complete_audio.webm');
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/analyze`, {
+      const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         body: formData,
         headers: {

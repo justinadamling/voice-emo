@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     libasound2-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user
+RUN useradd -m -u 1000 appuser
+
 # Set working directory
 WORKDIR /app
 
@@ -22,5 +25,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
+# Change ownership of the app directory
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Make sure the script is executable
+RUN chmod +x api.py
+
 # Command to run the application
-CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "$PORT"] 
+CMD ["python", "-u", "api.py"] 

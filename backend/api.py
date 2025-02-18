@@ -396,10 +396,11 @@ async def ping():
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.getenv("PORT", "8000"))
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
-        port=8000,
+        port=port,
         log_level="info",
         timeout_keep_alive=30,  # Reduce keep-alive timeout
         limit_concurrency=10,   # Limit concurrent connections
