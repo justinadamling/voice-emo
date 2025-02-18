@@ -34,11 +34,5 @@ USER appuser
 # Set Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1
 
-# Default to port 8000 if not set
-ENV PORT=8000
-
-# Make script executable
-RUN chmod +x api.py
-
 # Command to run the application with uvicorn
-CMD uvicorn api:app --host 0.0.0.0 --port $PORT 
+CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "$PORT"] 
