@@ -8,4 +8,5 @@ restartPolicyMaxRetries = 5
 startupTimeout = "60s"
 
 [service]
-rootDirectory = "backend" 
+rootDirectory = "backend"
+startCommand = "uvicorn api:app --host 0.0.0.0 --port $PORT" 
