@@ -208,6 +208,7 @@ async def test_endpoint():
 @app.post("/analyze")
 async def analyze_audio(request: Request):
     """Analyze audio for prosody"""
+    temp_wav = None
     try:
         start_time = time.time()
         logger.info("🎤 Starting audio analysis...")
@@ -224,12 +225,12 @@ async def analyze_audio(request: Request):
         logger.info(f"⚡ File received in {save_time - start_time:.2f}s")
         
         # Process audio data
-        audio = await process_audio(audio_data)
+        temp_wav = await process_audio(audio_data)
         process_time = time.time()
         logger.info(f"⚡ Audio processed in {process_time - save_time:.2f}s")
         
         # Analyze prosody
-        result = await analyze_prosody(audio)
+        result = await analyze_prosody(temp_wav)
         analysis_time = time.time()
         total_time = analysis_time - start_time
         
@@ -265,7 +266,7 @@ async def analyze_audio(request: Request):
         logger.error(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-async def process_audio(audio_data: bytes) -> AudioSegment:
+async def process_audio(audio_data: bytes) -> str:
     """Process incoming audio data and convert to WAV format"""
     try:
         global webm_header  # Use the global header variable
@@ -310,20 +311,27 @@ async def process_audio(audio_data: bytes) -> AudioSegment:
                 logger.error(f"FFmpeg error: {result.stderr}")
                 raise Exception(f"FFmpeg conversion failed: {result.stderr}")
             
-            # Load the converted WAV file
+            # Load the converted WAV file to get duration
             audio = AudioSegment.from_wav(temp_output)
             logger.info(f"📊 Audio duration: {len(audio)}ms")
-            return audio
             
-        finally:
-            # Clean up temporary files
+            # Clean up WebM file, but keep WAV for analysis
+            if os.path.exists(temp_input):
+                os.remove(temp_input)
+                logger.info(f"🧹 Cleaned up temporary file: {temp_input}")
+            
+            return temp_output
+            
+        except Exception as e:
+            # Clean up on error
             for temp_file in [temp_input, temp_output]:
                 if os.path.exists(temp_file):
                     try:
                         os.remove(temp_file)
                         logger.info(f"🧹 Cleaned up temporary file: {temp_file}")
-                    except Exception as e:
-                        logger.warning(f"Failed to clean up {temp_file}: {str(e)}")
+                    except Exception as cleanup_error:
+                        logger.warning(f"Failed to clean up {temp_file}: {str(cleanup_error)}")
+            raise
                 
     except Exception as e:
         logger.error(f"Error processing audio: {str(e)}")

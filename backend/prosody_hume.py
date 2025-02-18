@@ -195,19 +195,7 @@ async def analyze_prosody(audio_file_path: str) -> dict:
     if not api_key:
         raise ValueError("API key not found after environment refresh")
 
-    temp_wav = os.path.join(tempfile.gettempdir(), f'tmp{uuid.uuid4().hex}.wav')
     try:
-        # Export audio with correct parameters
-        audio = AudioSegment.from_file(audio_file_path)
-        audio.export(temp_wav, format='wav', parameters=["-ac", "1", "-ar", "44100"])
-        logger.info(f"💾 Saved audio to {temp_wav}")
-        
-        # Debug API key
-        key_length = len(api_key)
-        key_prefix = api_key[:4] if key_length >= 4 else ""
-        key_suffix = api_key[-4:] if key_length >= 4 else ""
-        logger.info(f"🔑 API Key Debug - Length: {key_length}, Format: {key_prefix}...{key_suffix}")
-        
         # Set up API request
         headers = {
             "accept": "application/json",
@@ -230,181 +218,228 @@ async def analyze_prosody(audio_file_path: str) -> dict:
         # Create FormData once
         data = aiohttp.FormData()
         data.add_field('json', json.dumps(config))
-        data.add_field('file', open(temp_wav, 'rb'), filename='audio.wav', content_type='audio/wav')
         
-        async with aiohttp.ClientSession() as session:
-            # Track submission time
-            submit_start = time.time()
+        # Get audio duration for smart polling
+        audio = AudioSegment.from_wav(audio_file_path)
+        audio_duration = len(audio) / 1000.0  # Convert to seconds
+        
+        # Open and add the WAV file directly
+        with open(audio_file_path, 'rb') as f:
+            data.add_field('file', f, filename='audio.wav', content_type='audio/wav')
             
-            # Submit job with debug logging
-            logger.info("📤 Submitting prosody analysis job...")
-            
-            async with session.post(url, headers=headers, data=data) as response:
-                response_text = await response.text()
-                logger.info(f"📥 Response status: {response.status}")
-                logger.info(f"📥 Response headers: {response.headers}")
-                logger.info(f"📥 Response text: {response_text[:200]}...")  # Log first 200 chars of response
+            async with aiohttp.ClientSession() as session:
+                # Track submission time
+                submit_start = time.time()
                 
-                if response.status != 200:
-                    raise Exception(f"Failed to submit job: {response_text}")
+                # Submit job with debug logging
+                logger.info("📤 Submitting prosody analysis job...")
                 
-                response_data = json.loads(response_text)
-                job_id = response_data["job_id"]
-                submit_time = time.time() - submit_start
-                logger.info(f"✅ Job submitted. ID: {job_id}")
-                
-                # Track polling time
-                poll_start = time.time()
-                
-                # Poll for completion with timeout
-                timeout = time.time() + 30  # 30 second timeout
-                base_delay = 0.1  # Start with 100ms delay
-                max_delay = 2.0   # Cap at 2 seconds
-                attempt = 0
-                
-                while time.time() < timeout:
-                    async with session.get(f"{url}/{job_id}", headers=headers) as status_response:
-                        if status_response.status != 200:
-                            error_text = await status_response.text()
-                            raise Exception(f"Failed to get job status: {error_text}")
-                        
-                        status_data = await status_response.json()
-                        state = status_data["state"]["status"]
-                        logger.info(f"Job state: {state}")
-                        
-                        if state == "COMPLETED":
-                            break
-                        elif state == "FAILED":
-                            raise Exception("Prosody analysis job failed")
-                        
-                        # Calculate delay with exponential backoff and jitter
-                        delay = min(base_delay * (2 ** attempt), max_delay)
-                        jitter = delay * 0.2 * random.random()  # Add up to 20% jitter
-                        delay_with_jitter = delay + jitter
-                        
-                        logger.info(f"Polling attempt {attempt + 1}: waiting {delay_with_jitter:.2f}s")
-                        await asyncio.sleep(delay_with_jitter)
-                        attempt += 1
-                else:
-                    raise Exception("Job timed out after 30 seconds")
-                
-                poll_time = time.time() - poll_start
-                
-                # Track prediction fetch time
-                predict_start = time.time()
-                
-                # Get predictions
-                async with session.get(f"{url}/{job_id}/predictions", headers=headers) as pred_response:
-                    if pred_response.status != 200:
-                        error_text = await pred_response.text()
-                        raise Exception(f"Failed to get predictions: {error_text}")
+                async with session.post(url, headers=headers, data=data) as response:
+                    response_text = await response.text()
+                    logger.info(f"📥 Response status: {response.status}")
+                    logger.info(f"📥 Response headers: {response.headers}")
+                    logger.info(f"📥 Response text: {response_text[:200]}...")
                     
-                    predictions = await pred_response.json()
-                    predict_time = time.time() - predict_start
+                    if response.status != 200:
+                        raise Exception(f"Failed to submit job: {response_text}")
                     
-                    if not predictions:
-                        logger.warning("No predictions returned from the API")
-                        return {
-                            "emotions": [],
-                            "duration": len(audio) / 1000.0,
-                            "timing": {
-                                "submit": submit_time,
-                                "poll": poll_time,
-                                "predict": predict_time
-                            }
-                        }
+                    response_data = json.loads(response_text)
+                    job_id = response_data["job_id"]
+                    submit_time = time.time() - submit_start
+                    logger.info(f"✅ Job submitted. ID: {job_id}")
                     
-                    try:
-                        # Process predictions
-                        if not predictions or len(predictions) == 0:
-                            logger.warning("No predictions in response array")
+                    # Set maximum polling attempts
+                    MAX_ATTEMPTS = 10
+
+                    # Track polling time
+                    poll_start = time.time()
+                    
+                    # Calculate smart initial delay based on audio duration
+                    initial_delay = min(1.2 + (audio_duration * 0.1), 2.0)
+                    logger.info(f"🕒 Waiting {initial_delay:.2f}s before first poll (audio: {audio_duration:.1f}s)")
+                    await asyncio.sleep(initial_delay)
+                    
+                    # Poll for completion with timeout
+                    timeout = time.time() + 30  # 30 second timeout
+                    base_delay = 0.3   # Fixed interval between polls
+                    attempt = 0
+                    last_progress = 0
+                    
+                    while time.time() < timeout:
+                        poll_attempt_start = time.time()
+                        
+                        async with session.get(f"{url}/{job_id}", headers=headers) as status_response:
+                            if status_response.status != 200:
+                                error_text = await status_response.text()
+                                raise Exception(f"Failed to get job status: {error_text}")
+                            
+                            status_data = await status_response.json()
+                            state = status_data.get("state", {})
+                            status = state.get("status", "UNKNOWN")
+                            message = state.get("message", "No message")
+                            progress = state.get("progress", {})
+                            percent = progress.get("percent", 0)
+                            
+                            logger.info(f"Job state: {status} - {percent}% complete - {message}")
+                            
+                            if status == "COMPLETED":
+                                logger.info(f"✅ Job completed after {attempt + 1} attempts")
+                                break
+                            elif status == "FAILED":
+                                raise Exception(f"❌ Prosody analysis job failed: {message}")
+                            elif status == "REJECTED":
+                                raise Exception(f"❌ Job rejected: {message}")
+                            elif status == "CANCELLED":
+                                raise Exception("❌ Job was cancelled")
+                            elif status not in ["PENDING", "RUNNING", "IN_PROGRESS"]:
+                                raise Exception(f"❓ Unknown job status: {status}")
+                            
+                            # Cap Maximum Polling Attempts
+                            if attempt >= MAX_ATTEMPTS:
+                                raise Exception("Job timed out after maximum attempts")
+                            
+                            # Adjust polling delay based on progress
+                            delay = base_delay
+                            if percent > last_progress:
+                                # Progress detected, poll more frequently
+                                delay *= 0.8
+                                logger.info(f"📈 Progress detected: {percent}% (reducing delay)")
+                            elif percent == 0 and attempt > 2:
+                                # No progress after several attempts, back off
+                                delay *= 1.2
+                                logger.info("⏳ No progress (increasing delay)")
+                            
+                            last_progress = percent
+                            
+                            # Add jitter to the delay
+                            jitter = delay * 0.1 * random.random()
+                            delay_with_jitter = delay + jitter
+                            
+                            await asyncio.sleep(delay_with_jitter)
+                            attempt += 1
+                    else:
+                        total_poll_time = time.time() - poll_start
+                        raise Exception(
+                            f"⏰ Job timed out after {total_poll_time:.1f}s "
+                            f"and {attempt} attempts"
+                        )
+                    
+                    poll_time = time.time() - poll_start
+                    
+                    # Track prediction fetch time
+                    predict_start = time.time()
+                    
+                    # Get predictions
+                    async with session.get(f"{url}/{job_id}/predictions", headers=headers) as pred_response:
+                        if pred_response.status != 200:
+                            error_text = await pred_response.text()
+                            raise Exception(f"Failed to get predictions: {error_text}")
+                        
+                        predictions = await pred_response.json()
+                        predict_time = time.time() - predict_start
+                        
+                        if not predictions:
+                            logger.warning("No predictions returned from the API")
                             return {
                                 "emotions": [],
-                                "duration": len(audio) / 1000.0,
+                                "duration": audio_duration,
                                 "timing": {
                                     "submit": submit_time,
                                     "poll": poll_time,
                                     "predict": predict_time
                                 }
                             }
+                        
+                        try:
+                            # Process predictions
+                            if not predictions or len(predictions) == 0:
+                                logger.warning("No predictions in response array")
+                                return {
+                                    "emotions": [],
+                                    "duration": audio_duration,
+                                    "timing": {
+                                        "submit": submit_time,
+                                        "poll": poll_time,
+                                        "predict": predict_time
+                                    }
+                                }
 
-                        prediction = predictions[0]
-                        if not prediction or "results" not in prediction:
-                            logger.warning("Invalid prediction format")
+                            prediction = predictions[0]
+                            if not prediction or "results" not in prediction:
+                                logger.warning("Invalid prediction format")
+                                return {
+                                    "emotions": [],
+                                    "duration": audio_duration,
+                                    "timing": {
+                                        "submit": submit_time,
+                                        "poll": poll_time,
+                                        "predict": predict_time
+                                    }
+                                }
+
+                            results = prediction.get("results", {})
+                            predictions_array = results.get("predictions", [])
+                            if not predictions_array:
+                                logger.warning("No predictions array in results")
+                                return {
+                                    "emotions": [],
+                                    "duration": audio_duration,
+                                    "timing": {
+                                        "submit": submit_time,
+                                        "poll": poll_time,
+                                        "predict": predict_time
+                                    }
+                                }
+
+                            prosody_data = predictions_array[0].get("models", {}).get("prosody", {})
+                            grouped_predictions = prosody_data.get("grouped_predictions", [])
+                            
+                            if grouped_predictions and grouped_predictions[0].get("predictions"):
+                                emotions_data = grouped_predictions[0]["predictions"][0].get("emotions", [])
+                                emotions = [
+                                    EmotionEmbeddingItem(
+                                        name=emotion["name"],
+                                        score=emotion["score"]
+                                    )
+                                    for emotion in emotions_data
+                                ]
+                            else:
+                                logger.warning("No emotions found in grouped predictions")
+                                emotions = []
+
+                            total_time = submit_time + poll_time + predict_time
+
+                            # Print clear analysis summary
+                            print("\n" + "="*50)
+                            print("🎯 Analysis Summary:")
+                            print(f"   - Audio Duration: {audio_duration:.1f}s")
+                            print("   - Timing Breakdown:")
+                            print(f"     • Submit: {submit_time:.2f}s")
+                            print(f"     • Poll: {poll_time:.2f}s")
+                            print(f"     • Predict: {predict_time:.2f}s")
+                            print(f"     • Total: {total_time:.2f}s")
+                            print(f"   - Emotions Found: {len(emotions)}")
+                            if emotions:
+                                print("   - Top 3 Emotions:")
+                                sorted_emotions = sorted(emotions, key=lambda x: x.score, reverse=True)[:3]
+                                for emotion in sorted_emotions:
+                                    print(f"     • {emotion.name}: {emotion.score:.3f}")
+                            print("="*50 + "\n")
+                            
                             return {
-                                "emotions": [],
-                                "duration": len(audio) / 1000.0,
+                                "emotions": emotions,
+                                "duration": audio_duration,
                                 "timing": {
                                     "submit": submit_time,
                                     "poll": poll_time,
-                                    "predict": predict_time
+                                    "predict": predict_time,
+                                    "total": total_time
                                 }
                             }
-
-                        results = prediction.get("results", {})
-                        predictions_array = results.get("predictions", [])
-                        if not predictions_array:
-                            logger.warning("No predictions array in results")
-                            return {
-                                "emotions": [],
-                                "duration": len(audio) / 1000.0,
-                                "timing": {
-                                    "submit": submit_time,
-                                    "poll": poll_time,
-                                    "predict": predict_time
-                                }
-                            }
-
-                        prosody_data = predictions_array[0].get("models", {}).get("prosody", {})
-                        grouped_predictions = prosody_data.get("grouped_predictions", [])
-                        
-                        if grouped_predictions and grouped_predictions[0].get("predictions"):
-                            emotions_data = grouped_predictions[0]["predictions"][0].get("emotions", [])
-                            emotions = [
-                                EmotionEmbeddingItem(
-                                    name=emotion["name"],
-                                    score=emotion["score"]
-                                )
-                                for emotion in emotions_data
-                            ]
-                        else:
-                            logger.warning("No emotions found in grouped predictions")
-                            emotions = []
-
-                        total_time = submit_time + poll_time + predict_time
-                        audio_duration = len(audio) / 1000.0  # Convert to seconds
-
-                        # Print clear analysis summary
-                        print("\n" + "="*50)
-                        print("🎯 Analysis Summary:")
-                        print(f"   - Audio Duration: {audio_duration:.1f}s")
-                        print("   - Timing Breakdown:")
-                        print(f"     • Submit: {submit_time:.2f}s")
-                        print(f"     • Poll: {poll_time:.2f}s")
-                        print(f"     • Predict: {predict_time:.2f}s")
-                        print(f"     • Total: {total_time:.2f}s")
-                        print(f"   - Emotions Found: {len(emotions)}")
-                        if emotions:
-                            print("   - Top 3 Emotions:")
-                            sorted_emotions = sorted(emotions, key=lambda x: x.score, reverse=True)[:3]
-                            for emotion in sorted_emotions:
-                                print(f"     • {emotion.name}: {emotion.score:.3f}")
-                        print("="*50 + "\n")
-                        
-                        return {
-                            "emotions": emotions,
-                            "duration": audio_duration,
-                            "timing": {
-                                "submit": submit_time,
-                                "poll": poll_time,
-                                "predict": predict_time,
-                                "total": total_time
-                            }
-                        }
-                        
-                    except Exception as e:
-                        logger.error(f"Error processing predictions: {str(e)}")
-                        raise Exception(f"Failed to process predictions: {str(e)}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error processing predictions: {str(e)}")
+                            raise Exception(f"Failed to process predictions: {str(e)}")
     except Exception as e:
         error_msg = str(e)
         if "<!DOCTYPE html>" in error_msg:
@@ -415,11 +450,6 @@ async def analyze_prosody(audio_file_path: str) -> dict:
                 error_msg = "Hume API server error. Please try again later."
         logger.error(f"❌ Error in prosody analysis: {error_msg}")
         raise Exception(error_msg)
-    finally:
-        # Clean up temporary file
-        if os.path.exists(temp_wav):
-            os.remove(temp_wav)
-            logger.info("🧹 Cleaned up temporary file")
 
 async def main():
     # Record an audio sample from the microphone
