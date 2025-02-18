@@ -3,10 +3,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "backend/Dockerfile"
 
 [deploy]
-healthcheckPath = "/ping"
-healthcheckTimeout = 30
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
+startupTimeout = "60s"
 
 [service]
 rootDirectory = "backend" 
